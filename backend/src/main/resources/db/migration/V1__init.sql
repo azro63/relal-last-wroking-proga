@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS schema_health (
+    id SERIAL PRIMARY KEY,
+    checked_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
