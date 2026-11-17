@@ -1,0 +1,9 @@
+backend/build/
+backend/.gradle/
+backend/out/
+overlay-ui/node_modules/
+overlay-ui/dist/
+.env
+*.log
+.idea/
+.vscode/
