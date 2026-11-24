@@ -4,233 +4,125 @@
     <meta charset="UTF-8">
     <title>Dota 2 Pro Overlay</title>
 
-    <!-- SockJS для совместимости с OBS -->
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-    <!-- STOMP v7 -->
     <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap');
 
         body {
-            margin: 0;
-            padding: 0;
-            background: transparent; /* Прозрачный фон для OBS */
+            margin: 0; padding: 0;
+            background: transparent;
             font-family: 'Roboto', sans-serif;
             color: white;
             overflow: hidden;
             user-select: none;
         }
 
-        /* --- Верхняя панель (Счет и Таймер) --- */
         .top-container {
-            position: absolute;
-            top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            z-index: 10;
+            position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; align-items: center; z-index: 10;
         }
 
         .scoreboard {
             background: linear-gradient(180deg, rgba(20, 20, 20, 0.95) 0%, rgba(10, 10, 10, 0.85) 100%);
-            padding: 8px 40px;
-            border-radius: 0 0 12px 12px;
-            display: flex;
-            gap: 40px;
-            align-items: center;
-            border-bottom: 3px solid #c79b46; /* Золотой акцент */
+            padding: 8px 40px; border-radius: 0 0 12px 12px;
+            display: flex; gap: 40px; align-items: center;
+            border-bottom: 3px solid #c79b46;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
-            min-width: 350px;
-            justify-content: space-between;
+            min-width: 350px; justify-content: space-between;
         }
 
-        .score {
-            font-size: 36px;
-            font-weight: 900;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            width: 60px;
-            text-align: center;
-        }
+        .score { font-size: 36px; font-weight: 900; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); width: 60px; text-align: center; }
         .score-radiant { color: #8fce00; }
         .score-dire { color: #d93636; }
 
         .timer {
-            font-size: 28px;
-            font-weight: 700;
-            color: #fff;
-            background: rgba(0,0,0,0.6);
-            padding: 2px 15px;
-            border-radius: 6px;
-            letter-spacing: 2px;
+            font-size: 28px; font-weight: 700; color: #fff;
+            background: rgba(0,0,0,0.6); padding: 2px 15px;
+            border-radius: 6px; letter-spacing: 2px;
             border: 1px solid rgba(255,255,255,0.1);
         }
 
-        /* Панель экономики */
         .economy-bar {
-            margin-top: 6px;
-            background: rgba(10, 10, 10, 0.85);
-            padding: 6px 25px;
-            border-radius: 20px;
-            display: flex;
-            gap: 25px;
-            font-size: 16px;
-            font-weight: 700;
-            border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            margin-top: 6px; background: rgba(10, 10, 10, 0.85);
+            padding: 6px 25px; border-radius: 20px;
+            display: flex; gap: 25px; font-size: 16px; font-weight: 700;
+            border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 2px 10px rgba(0,0,0,0.5);
         }
         .eco-diff { font-weight: 900; font-size: 18px; }
 
-        /* --- Панели героев --- */
         .heroes-container {
-            position: absolute;
-            top: 100px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            width: 260px; /* Ширина карточек */
+            position: absolute; top: 100px;
+            display: flex; flex-direction: column; gap: 6px; width: 260px;
         }
         .heroes-container.radiant { left: 20px; }
         .heroes-container.dire { right: 20px; align-items: flex-end; }
 
-        /* Карточка героя */
         .hero-card {
-            display: flex;
-            align-items: center;
+            display: flex; align-items: center;
             background: rgba(15, 15, 15, 0.9);
-            width: 100%;
-            height: 52px;
-            padding: 4px;
-            border-radius: 4px;
-            border-left: 4px solid #8fce00; /* Цвет радианта */
+            width: 100%; height: 52px; padding: 4px;
+            border-radius: 4px; border-left: 4px solid #8fce00;
             box-shadow: 0 2px 8px rgba(0,0,0,0.6);
-            transition: all 0.2s ease;
-            box-sizing: border-box;
-            position: relative;
+            transition: all 0.2s ease; box-sizing: border-box; position: relative;
         }
 
-        .hero-card.dire {
-            border-left: none;
-            border-right: 4px solid #d93636; /* Цвет дыры */
-            flex-direction: row-reverse;
-        }
+        .hero-card.dire { border-left: none; border-right: 4px solid #d93636; flex-direction: row-reverse; }
 
-        /* Аватарка героя */
         .hero-avatar {
-            width: 44px;
-            height: 44px;
-            background: #222;
-            border-radius: 3px;
-            margin: 0 8px;
-            border: 1px solid #444;
-            background-size: cover;
-            background-position: center;
+            width: 44px; height: 44px; background: #222;
+            border-radius: 3px; margin: 0 8px;
+            border: 1px solid #444; background-size: cover; background-position: center;
             flex-shrink: 0;
         }
 
-        /* Информация о герое */
-        .hero-info {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            overflow: hidden;
-        }
+        .hero-info { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
         .hero-card.dire .hero-info { align-items: flex-end; }
 
         .hero-name-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 4px;
-            width: 100%;
-            padding: 0 4px;
-            box-sizing: border-box;
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 4px; width: 100%; padding: 0 4px; box-sizing: border-box;
         }
         .hero-card.dire .hero-name-row { flex-direction: row-reverse; }
 
         .hero-name {
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
+            font-size: 12px; font-weight: 700; text-transform: uppercase;
             text-shadow: 1px 1px 2px #000;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 130px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            max-width: 160px; /* Увеличено для длинных ников */
         }
 
         .hero-lvl {
-            color: #f1c40f;
-            font-size: 11px;
-            font-weight: 900;
-            background: rgba(0,0,0,0.8);
-            padding: 0px 4px;
-            border-radius: 3px;
-            border: 1px solid rgba(241, 196, 15, 0.3);
+            color: #f1c40f; font-size: 11px; font-weight: 900;
+            background: rgba(0,0,0,0.8); padding: 0px 4px; border-radius: 3px;
+            border: 1px solid rgba(241, 196, 15, 0.3); flex-shrink: 0;
         }
 
-        /* Полоски HP и MP */
         .bar-container {
-            height: 7px;
-            background: #111;
-            border-radius: 2px;
-            overflow: hidden;
-            margin-bottom: 3px;
-            border: 1px solid rgba(255,255,255,0.1);
-            width: 96%;
+            height: 7px; background: #111; border-radius: 2px;
+            overflow: hidden; margin-bottom: 3px;
+            border: 1px solid rgba(255,255,255,0.1); width: 96%;
         }
-        .hp-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #2ecc71 0%, #27ae60 100%);
-            width: 0%;
-            transition: width 0.2s ease;
-        }
-        .mp-bar {
-            height: 4px;
-            background: linear-gradient(90deg, #3498db 0%, #2980b9 100%);
-            width: 0%;
-            transition: width 0.2s ease;
-        }
+        .hp-bar { height: 100%; background: linear-gradient(90deg, #2ecc71 0%, #27ae60 100%); width: 0%; transition: width 0.2s ease; }
+        .mp-bar { height: 4px; background: linear-gradient(90deg, #3498db 0%, #2980b9 100%); width: 0%; transition: width 0.2s ease; }
 
-        /* Состояние мертвого героя */
-        .hero-card.dead {
-            opacity: 0.7;
-            filter: grayscale(100%);
-        }
+        .hero-card.dead { opacity: 0.7; filter: grayscale(100%); }
 
         .respawn-timer {
-            position: absolute;
-            left: 8px; /* Позиционируем поверх аватарки */
-            top: 50%;
-            transform: translateY(-50%);
-            width: 44px;
-            height: 44px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.6);
-            border-radius: 3px;
-            font-size: 20px;
-            font-weight: 900;
-            color: #e74c3c;
-            text-shadow: 1px 1px 3px #000;
-            z-index: 2;
+            position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+            width: 44px; height: 44px; display: none; align-items: center; justify-content: center;
+            background: rgba(0, 0, 0, 0.6); border-radius: 3px;
+            font-size: 20px; font-weight: 900; color: #e74c3c;
+            text-shadow: 1px 1px 3px #000; z-index: 2;
         }
 
-        .hero-card.dire .respawn-timer {
-            left: auto;
-            right: 8px;
-        }
-
+        .hero-card.dire .respawn-timer { left: auto; right: 8px; }
         .hero-card.dead .respawn-timer { display: flex; }
     </style>
 </head>
 <body>
 
-<!-- Верхняя панель со счетом -->
 <div class="top-container">
     <div class="scoreboard">
         <div class="score score-radiant" id="score-radiant">0</div>
@@ -244,38 +136,28 @@
     </div>
 </div>
 
-<!-- Контейнеры для героев -->
 <div class="heroes-container radiant" id="radiant-heroes"></div>
 <div class="heroes-container dire" id="dire-heroes"></div>
 
 <script>
-    // --- НАСТРОЙКА WEBSOCKET ---
     const socket = new SockJS('/ws');
-
     const stompClient = new StompJs.Client({
         webSocketFactory: () => socket,
-        reconnectDelay: 3000,
-        debug: function (str) {}
+        reconnectDelay: 3000
     });
 
-    stompClient.onConnect = function (frame) {
-        console.log('WebSocket Connected');
+    stompClient.onConnect = function () {
         stompClient.subscribe('/topic/overlay', function (message) {
-            const state = JSON.parse(message.body);
-            updateUI(state);
+            updateUI(JSON.parse(message.body));
         });
     };
-
     stompClient.activate();
 
-    // --- ЛОГИКА ОТРИСОВКИ ---
     function updateUI(state) {
-        // Обновляем таймер и счет
         document.getElementById('timer').innerText = formatTime(state.gameTime);
         document.getElementById('score-radiant').innerText = state.radiantScore;
         document.getElementById('score-dire').innerText = state.direScore;
 
-        // Обновляем экономику (переводим в "к" тысячи)
         const rEco = Math.round(state.radiantEconomy / 1000);
         const dEco = Math.round(state.direEconomy / 1000);
         const diff = rEco - dEco;
@@ -295,7 +177,6 @@
             diffEl.style.color = '#fff';
         }
 
-        // Рисуем героев
         renderHeroes('radiant-heroes', state.radiantHeroes, false);
         renderHeroes('dire-heroes', state.direHeroes, true);
     }
@@ -308,7 +189,6 @@
             return;
         }
 
-        // Если список пустой или изменилось количество героев, создаем DOM заново
         if (container.children.length !== heroes.length) {
             container.innerHTML = '';
             heroes.forEach(() => {
@@ -330,31 +210,24 @@
             });
         }
 
-        // Обновляем данные в существующих карточках
         heroes.forEach((hero, index) => {
             const card = container.children[index];
 
-            // Никнейм и уровень
-            card.querySelector('.hero-name').innerText = hero.name || 'Unknown';
+            card.querySelector('.hero-name').innerText = hero.name;
             card.querySelector('.hero-lvl').innerText = hero.level;
 
-            // Полоски здоровья и маны
             card.querySelector('.hp-bar').style.width = `${hero.hpPercent}%`;
             card.querySelector('.mp-bar').style.width = `${hero.manaPercent}%`;
 
-            // Картинка героя (CDN Valve)
             const avatarDiv = card.querySelector('.hero-avatar');
-            if (hero.heroName) {
-                // Убираем префикс "npc_dota_hero_" для правильного URL
+            if (hero.heroName && hero.heroName !== 'default') {
                 const imgName = hero.heroName.replace('npc_dota_hero_', '');
                 const imgUrl = `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/${imgName}.png`;
-                // Обновляем картинку только если она изменилась (чтобы не было мерцания)
                 if (avatarDiv.style.backgroundImage !== `url("${imgUrl}")`) {
                     avatarDiv.style.backgroundImage = `url("${imgUrl}")`;
                 }
             }
 
-            // Состояние смерти
             if (!hero.alive) {
                 card.classList.add('dead');
                 card.querySelector('.respawn-timer').innerText = hero.respawnTimer;
@@ -364,7 +237,6 @@
         });
     }
 
-    // Форматирование времени (секунды -> MM:SS)
     function formatTime(seconds) {
         if (seconds === null || seconds === undefined || seconds < 0) return "00:00";
         const m = Math.floor(seconds / 60);

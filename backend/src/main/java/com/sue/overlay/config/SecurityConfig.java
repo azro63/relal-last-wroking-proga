@@ -15,8 +15,8 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(a -> a
-                        .requestMatchers("/ws/**", "/overlay.html", "/*.js", "/*.css").permitAll() // Разрешаем фронтенд и WebSocket
-                        .anyRequest().permitAll() // Остальное тоже оставляем открытым для локальной сети
+                        .requestMatchers("/ws/**", "/*.html", "/common.css", "/overlay-draft.css", "/overlay-draft.js", "/error").permitAll()
+                        .anyRequest().permitAll()
                 );
         return http.build();
     }

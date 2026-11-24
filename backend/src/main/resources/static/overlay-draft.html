@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>Samara University — Draft</title>
+    <link rel="stylesheet" href="common.css">
+    <link rel="stylesheet" href="overlay-draft.css">
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+</head>
+<body>
+<div class="draft-bar" id="draft-bar" style="display:none;">
+    <div class="team-section radiant" id="team-radiant">
+        <div class="picks-row">
+            <div class="pick-slot" id="rad-pick-0"></div>
+            <div class="pick-slot" id="rad-pick-1"></div>
+            <div class="pick-slot" id="rad-pick-2"></div>
+            <div class="pick-slot" id="rad-pick-3"></div>
+            <div class="pick-slot" id="rad-pick-4"></div>
+        </div>
+        <div class="bans-row" id="rad-bans"></div>
+    </div>
+
+    <div class="center-section">
+        <div class="tournament-stage" id="draft-stage">DRAFT</div>
+        <div class="turn-arrow" id="turn-arrow">◀</div>
+
+        <div class="matchup-row">
+            <div class="team-tag radiant" id="draft-radiant-tag">Radiant</div>
+            <div class="series-info">
+                <div class="series-format" id="draft-series-format">до 3 побед</div>
+                <div class="series-score" id="draft-score">0 : 0</div>
+            </div>
+            <div class="team-tag dire" id="draft-dire-tag">Dire</div>
+        </div>
+
+        <div class="timers-row">
+            <div class="timer-box" id="timer-box-left">
+                <span class="timer-label">ЗАПРЕТ / ПИК</span>
+                <span class="timer-value" id="draft-timer">0:00</span>
+            </div>
+            <div class="timer-box reserve-box">
+                <span class="timer-label">РЕЗЕРВ</span>
+                <span class="timer-value" id="draft-reserve">0:00</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="team-section dire" id="team-dire">
+        <div class="picks-row">
+            <div class="pick-slot" id="dire-pick-0"></div>
+            <div class="pick-slot" id="dire-pick-1"></div>
+            <div class="pick-slot" id="dire-pick-2"></div>
+            <div class="pick-slot" id="dire-pick-3"></div>
+            <div class="pick-slot" id="dire-pick-4"></div>
+        </div>
+        <div class="bans-row" id="dire-bans"></div>
+    </div>
+</div>
+
+<script src="overlay-draft.js"></script>
+</body>
+</html>

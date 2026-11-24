@@ -1,0 +1,134 @@
+:root {
+  --bg-blue: #4da6ff;
+  --panel-blue: #2e75ff;
+  --border-blue: #1e60c0;
+  --neon-green: #33ff77;
+  --dark: #000000;
+  --radiant: #00e5ff;
+  --dire: #ff3355;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%; background: transparent;
+  font-family: "Roboto Condensed", "Segoe UI", sans-serif; overflow: hidden;
+}
+
+.draft-bar {
+  position: fixed; bottom: 0; left: 0; width: 100%; height: 200px;
+  background: var(--bg-blue); border-top: 4px solid var(--border-blue);
+  display: flex; justify-content: space-between; align-items: stretch;
+  padding: 10px; gap: 10px;
+}
+
+.team-section {
+  flex: 1; background: var(--panel-blue); border: 2px solid var(--border-blue);
+  border-radius: 12px; display: flex; flex-direction: column; padding: 8px;
+  gap: 8px; position: relative; overflow: hidden;
+}
+
+.picks-row { display: flex; gap: 8px; width: 100%; flex: 1; justify-content: space-between; }
+
+.pick-slot {
+  flex: 1; background-color: var(--dark);
+  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 0l17.32 10v20L20 40 2.68 30V10L20 0zm0 2L4.36 11v18L20 38l15.64-9V11L20 2z' fill='%232e75ff' fill-opacity='0.2' fill-rule='evenodd'/%3E%3C/svg%3E");
+  background-size: cover; background-position: center;
+  border-radius: 8px; position: relative; overflow: hidden;
+}
+
+.pick-slot video, .pick-slot img {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: center top;
+  transform-origin: center top;
+  animation: heroFadeIn 0.4s ease-out forwards;
+  z-index: 1;
+}
+
+@keyframes heroFadeIn {
+  0% { opacity: 0; filter: blur(4px); transform: scale(1.7) translate(-5%, 8%); }
+  100% { opacity: 1; filter: blur(0); transform: scale(1.0); }
+}
+
+.bans-row { display: flex; gap: 4px; width: 100%; height: 32px; justify-content: space-between; }
+
+.ban-slot {
+  flex: 1; background-color: var(--dark); border-radius: 4px;
+  position: relative; overflow: hidden;
+}
+
+.ban-slot img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; filter: grayscale(100%) brightness(0.5);
+}
+
+.ban-slot:not(:empty)::before {
+  content: '✖'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  color: #ff3333; font-size: 14px; z-index: 2; text-shadow: 0 0 4px #000;
+}
+
+/* --- ЦЕНТРАЛЬНЫЙ БЛОК --- */
+.center-section {
+  width: 420px;
+  background: var(--dark);
+  border: 2px solid var(--border-blue);
+  border-radius: 12px; display: flex; flex-direction: column; padding: 10px;
+  gap: 8px; position: relative; align-items: center;
+}
+
+.tournament-stage {
+  width: 100%; text-align: center; font-size: 13px; font-weight: 900;
+  text-transform: uppercase; letter-spacing: 0.2em; color: var(--bg-blue);
+  background: transparent;
+  border: none; /* Убрана обводка и подчеркивание */
+  padding: 3px 10px;
+}
+
+.turn-arrow { display: none; }
+
+.matchup-row {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; height: 50px; gap: 10px;
+}
+
+.team-tag {
+  flex: 1; min-width: 0; font-size: 20px; font-weight: 900;
+  white-space: nowrap; overflow: hidden; text-transform: uppercase;
+  text-align: center; line-height: 50px;
+  color: #fff;
+}
+
+.series-info {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: transparent;
+  border: none; /* Убрана обводка */
+  padding: 4px 14px; border-radius: 6px; min-width: 70px;
+}
+
+.series-format { font-size: 9px; color: #aaa; text-transform: uppercase; }
+.series-score { font-size: 20px; font-weight: 900; color: #fff; line-height: 1; }
+
+.timers-row {
+  display: flex; align-items: stretch; justify-content: space-between;
+  width: 100%; height: 60px; gap: 8px;
+}
+
+.timer-box {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: transparent;
+  border: none; /* Убрана обводка */
+  border-radius: 8px;
+}
+
+.timer-label { font-size: 11px; color: #fff; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
+.timer-value { font-size: 24px; font-weight: 900; color: #fff; line-height: 1; font-variant-numeric: tabular-nums; }
+
+#timer-box-left .timer-label, #timer-box-left .timer-value { color: var(--bg-blue); }
+
+/* Активное состояние оставил в виде свечения, чтобы было видно чей ход */
+.timer-box.active { box-shadow: inset 0 0 15px rgba(77, 166, 255, 0.3); }
+
+#timer-box-left.active .timer-value {
+  color: var(--bg-blue);
+}
