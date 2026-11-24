@@ -1,16 +1,18 @@
 package com.sue.overlay.service;
 
-import com.github.mrbean355.dota2.gamestate.SpectatingGameState;
-import com.sue.overlay.persistence.entity.GameEvent;
-import com.sue.overlay.persistence.entity.GameSnapshot;
+import com.sue.overlay.model.GameEvent;
+import com.sue.overlay.model.GameSnapshot;
 import com.sue.overlay.repository.GameEventRepository;
 import com.sue.overlay.repository.GameSnapshotRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class GameStatePersistenceService {
@@ -25,32 +27,77 @@ public class GameStatePersistenceService {
         this.eventRepository = eventRepository;
     }
 
-    @Transactional
-    public void saveSnapshot(SpectatingGameState gameState) {
-        if (gameState == null || gameState.getMap() == null) return;
+    /** body — JSON от Dota 2 GSI: { "map": { "clock_time": .., "game_time": .., "daytime": .., "win_team": .. }, "events": [..] } */
+    public void saveSnapshot(Map<String, Object> body) {
+        if (!(body.get("map") instanceof Map<?, ?> map)) return;
+        if (!(map.get("clock_time") instanceof Number clock)) return;
 
-        var map = gameState.getMap();
-        GameSnapshot snapshot = new GameSnapshot();
-        snapshot.setClockTime(map.getClockTime());
-        snapshot.setCapturedAt(LocalDateTime.now());
+        Integer gameTime = map.get("game_time") instanceof Number gt ? gt.intValue() : null;
+        Boolean daytime = map.get("daytime") instanceof Boolean day ? day : null;
+        String winTeam = map.get("win_team") instanceof String win && !win.isBlank() && !"none".equals(win) ? win : null;
 
+        GameSnapshot snapshot = new GameSnapshot(null, clock.intValue(), gameTime, daytime, winTeam,
+                LocalDateTime.now(ZoneOffset.UTC));
         snapshotRepository.save(snapshot);
     }
 
-    @Transactional
-    public void saveEvents(SpectatingGameState gameState) {
-        if (gameState == null || gameState.getEvents() == null || gameState.getEvents().isEmpty()) return;
+    public void saveEvents(Map<String, Object> body) {
+        if (!(body.get("events") instanceof List<?> events) || events.isEmpty()) return;
 
-        for (var dotaEvent : gameState.getEvents()) {
-            GameEvent entity = new GameEvent();
-            entity.setEventType(dotaEvent.getEventType());
-            entity.setGameTime(dotaEvent.getGameTime());
-            // Если payload сложный, лучше использовать Jackson ObjectMapper для сериализации в String
-            entity.setPayload(dotaEvent.getPayload() != null ? dotaEvent.getPayload().toString() : null);
-            entity.setCapturedAt(LocalDateTime.now());
-            eventRepository.save(entity);
+        for (Object o : events) {
+            if (!(o instanceof Map<?, ?> ev)) continue;
+            if (!(ev.get("event_type") instanceof String type)) continue;
 
-            log.info("Сохранено событие: {} на {} сек.", entity.getEventType(), entity.getGameTime());
+            int gameTime = ev.get("game_time") instanceof Number n ? n.intValue() : 0;
+            GameEvent entity = eventRepository.save(
+                    new GameEvent(null, type, gameTime, toJson(ev), LocalDateTime.now(ZoneOffset.UTC)));
+
+            log.info("Сохранено событие: {} на {} сек.", entity.eventType(), entity.gameTime());
         }
+    }
+
+    /** Минимальный JSON-сериализатор (Map / Collection / String / Number / Boolean / null). */
+    static String toJson(Object v) {
+        if (v == null) return "null";
+        if (v instanceof Number || v instanceof Boolean) return v.toString();
+        if (v instanceof Map<?, ?> m) {
+            StringBuilder sb = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<?, ?> e : m.entrySet()) {
+                if (!first) sb.append(',');
+                first = false;
+                sb.append(quote(String.valueOf(e.getKey()))).append(':').append(toJson(e.getValue()));
+            }
+            return sb.append('}').toString();
+        }
+        if (v instanceof Collection<?> c) {
+            StringBuilder sb = new StringBuilder("[");
+            boolean first = true;
+            for (Object x : c) {
+                if (!first) sb.append(',');
+                first = false;
+                sb.append(toJson(x));
+            }
+            return sb.append(']').toString();
+        }
+        return quote(v.toString());
+    }
+
+    private static String quote(String s) {
+        StringBuilder sb = new StringBuilder("\"");
+        for (char ch : s.toCharArray()) {
+            switch (ch) {
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (ch < 0x20) sb.append(String.format("\\u%04x", (int) ch));
+                    else sb.append(ch);
+                }
+            }
+        }
+        return sb.append('"').toString();
     }
 }

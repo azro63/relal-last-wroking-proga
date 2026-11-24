@@ -1,8 +1,7 @@
 package com.sue.overlay.controller;
 
-import com.sue.overlay.persistence.entity.GameSnapshot;
+import com.sue.overlay.model.GameSnapshot;
 import com.sue.overlay.repository.GameSnapshotRepository;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,13 +23,13 @@ public class GameSnapshotController {
     /** GET /api/snapshots/latest?n=10 */
     @GetMapping("/latest")
     public List<GameSnapshot> latest(@RequestParam(defaultValue = "10") int n) {
-        return repository.findLatestSnapshots(PageRequest.of(0, n));
+        return repository.findLatest(n);
     }
 
     /** GET /api/snapshots/after/600 */
     @GetMapping("/after/{clockTime}")
     public List<GameSnapshot> after(@PathVariable int clockTime) {
-        return repository.findSnapshotsAfterClockTime(clockTime);
+        return repository.findAfterClockTime(clockTime);
     }
 
     /** GET /api/snapshots/between?from=...&to=... */
@@ -44,7 +43,7 @@ public class GameSnapshotController {
     /** GET /api/snapshots/night — только ночные */
     @GetMapping("/night")
     public List<GameSnapshot> night() {
-        return repository.findByDaytimeIsFalse();
+        return repository.findNight();
     }
 
     /**
@@ -62,9 +61,9 @@ public class GameSnapshotController {
         return result;
     }
 
-    /** GET /api/snapshots/by-team?team=radiant (нативный SQL) */
+    /** GET /api/snapshots/by-team?team=radiant */
     @GetMapping("/by-team")
     public List<GameSnapshot> byTeamNative(@RequestParam String team) {
-        return repository.findSnapshotsByWinTeamNative(team);
+        return repository.findByWinTeam(team);
     }
 }

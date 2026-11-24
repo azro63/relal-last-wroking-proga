@@ -1,16 +1,14 @@
 package com.sue.overlay.controller;
 
-import com.sue.overlay.persistence.entity.GameEvent;
+import com.sue.overlay.model.GameEvent;
 import com.sue.overlay.repository.GameEventRepository;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Validated
 @RestController
@@ -30,14 +28,14 @@ public class GameEventController {
 
     @GetMapping("/latest")
     public List<GameEvent> latest(@RequestParam(defaultValue = "20") @Min(1) @Max(100) int n) {
-        return repository.findLatest(PageRequest.of(0, n));
+        return repository.findLatest(n);
     }
 
     @GetMapping("/{type}")
     public List<GameEvent> byType(
             @PathVariable String type,
             @RequestParam(defaultValue = "50") @Min(1) @Max(200) int limit) {
-        return repository.findByEventTypeOrderByGameTimeDesc(type, PageRequest.of(0, limit));
+        return repository.findByTypeOrderByGameTimeDesc(type, limit);
     }
 
     @GetMapping("/after/{gameTime}")
@@ -47,10 +45,6 @@ public class GameEventController {
 
     @GetMapping("/stats")
     public Map<String, Long> stats() {
-        return repository.countByEventType().stream()
-                .collect(Collectors.toMap(
-                        row -> (String) row[0],
-                        row -> (Long) row[1]
-                ));
+        return repository.countByEventType();
     }
 }

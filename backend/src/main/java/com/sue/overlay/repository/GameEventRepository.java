@@ -1,26 +1,96 @@
 package com.sue.overlay.repository;
 
-import com.sue.overlay.persistence.entity.GameEvent;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import com.sue.overlay.model.GameEvent;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import java.time.LocalDateTime;
+import java.util.*;
 
-public interface GameEventRepository extends JpaRepository<GameEvent, Long> {
+/**
+ * Структура в Redis:
+ *   event:seq              — счётчик id
+ *   event:{id}             — hash с полями события
+ *   events:all             — zset, score = id
+ *   events:time            — zset, score = game_time
+ *   events:type:{type}     — zset, score = game_time
+ *   events:types           — set типов событий
+ *   events:counts          — hash type -> количество
+ */
+@Repository
+public class GameEventRepository {
 
-    List<GameEvent> findByEventTypeOrderByGameTimeDesc(String eventType, Pageable pageable);
+    private static final String ALL = "events:all";
+    private static final String TIME = "events:time";
+    private static final String TYPES = "events:types";
+    private static final String COUNTS = "events:counts";
 
-    @Query("SELECT e FROM GameEvent e ORDER BY e.id DESC")
-    List<GameEvent> findLatest(Pageable pageable);
+    private final StringRedisTemplate redis;
 
-    @Query("SELECT e FROM GameEvent e WHERE e.gameTime > :gameTime ORDER BY e.gameTime")
-    List<GameEvent> findAfterGameTime(@Param("gameTime") int gameTime);
+    public GameEventRepository(StringRedisTemplate redis) {
+        this.redis = redis;
+    }
 
-    @Query("SELECT DISTINCT e.eventType FROM GameEvent e ORDER BY e.eventType")
-    List<String> findAllEventTypes();
+    public GameEvent save(GameEvent e) {
+        long id = Objects.requireNonNull(redis.opsForValue().increment("event:seq"));
+        String sid = String.valueOf(id);
 
-    @Query("SELECT e.eventType, COUNT(e) FROM GameEvent e GROUP BY e.eventType ORDER BY COUNT(e) DESC")
-    List<Object[]> countByEventType();
+        Map<String, String> h = new HashMap<>();
+        h.put("eventType", e.eventType());
+        h.put("gameTime", String.valueOf(e.gameTime()));
+        h.put("capturedAt", e.capturedAt().toString());
+        if (e.payload() != null) h.put("payload", e.payload());
+        redis.opsForHash().putAll("event:" + id, h);
+
+        redis.opsForZSet().add(ALL, sid, id);
+        redis.opsForZSet().add(TIME, sid, e.gameTime());
+        redis.opsForZSet().add("events:type:" + e.eventType(), sid, e.gameTime());
+        redis.opsForSet().add(TYPES, e.eventType());
+        redis.opsForHash().increment(COUNTS, e.eventType(), 1);
+
+        return new GameEvent(id, e.eventType(), e.gameTime(), e.payload(), e.capturedAt());
+    }
+
+    public List<GameEvent> findByTypeOrderByGameTimeDesc(String type, int limit) {
+        return load(redis.opsForZSet().reverseRange("events:type:" + type, 0, limit - 1));
+    }
+
+    public List<GameEvent> findLatest(int n) {
+        return load(redis.opsForZSet().reverseRange(ALL, 0, n - 1));
+    }
+
+    public List<GameEvent> findAfterGameTime(int gameTime) {
+        return load(redis.opsForZSet().rangeByScore(TIME, gameTime + 1.0, Double.POSITIVE_INFINITY));
+    }
+
+    public List<String> findAllEventTypes() {
+        Set<String> types = redis.opsForSet().members(TYPES);
+        return types == null ? List.of() : types.stream().sorted().toList();
+    }
+
+    /** Тип события -> количество, по убыванию. */
+    public Map<String, Long> countByEventType() {
+        Map<Object, Object> raw = redis.opsForHash().entries(COUNTS);
+        Map<String, Long> result = new LinkedHashMap<>();
+        raw.entrySet().stream()
+                .sorted((a, b) -> Long.compare(Long.parseLong((String) b.getValue()), Long.parseLong((String) a.getValue())))
+                .forEach(en -> result.put((String) en.getKey(), Long.valueOf((String) en.getValue())));
+        return result;
+    }
+
+    private List<GameEvent> load(Collection<String> ids) {
+        List<GameEvent> result = new ArrayList<>();
+        if (ids == null) return result;
+        for (String id : ids) {
+            Map<Object, Object> h = redis.opsForHash().entries("event:" + id);
+            if (h.isEmpty()) continue;
+            result.add(new GameEvent(
+                    Long.valueOf(id),
+                    (String) h.get("eventType"),
+                    Integer.parseInt((String) h.get("gameTime")),
+                    (String) h.get("payload"),
+                    LocalDateTime.parse((String) h.get("capturedAt"))));
+        }
+        return result;
+    }
 }
