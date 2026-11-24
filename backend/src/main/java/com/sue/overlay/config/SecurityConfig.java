@@ -7,18 +7,17 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 
-/**
- * Dota 2 GSI шлёт POST без авторизации и CSRF-токена, оверлей читает API без логина —
- * поэтому по умолчанию (всё закрыто basic-auth) работать не будет.
- */
 @Configuration
 public class SecurityConfig {
 
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
-            .cors(Customizer.withDefaults())
-            .authorizeHttpRequests(a -> a.anyRequest().permitAll());
+                .cors(Customizer.withDefaults())
+                .authorizeHttpRequests(a -> a
+                        .requestMatchers("/ws/**", "/overlay.html", "/*.js", "/*.css").permitAll() // Разрешаем фронтенд и WebSocket
+                        .anyRequest().permitAll() // Остальное тоже оставляем открытым для локальной сети
+                );
         return http.build();
     }
 }

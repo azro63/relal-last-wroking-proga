@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dota 2 Overlay</title>
+    <!-- Подключаем SockJS и Stomp для WebSocket -->
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+    <style>
+        body {
+            margin: 0; padding: 0;
+            background: transparent; /* Прозрачный фон для OBS */
+            font-family: 'Roboto', sans-serif;
+            color: white;
+            overflow: hidden;
+        }
+        /* Верхняя панель */
+        .top-bar {
+            position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 40px;
+            border-radius: 0 0 10px 10px;
+            display: flex; gap: 30px; align-items: center;
+            border-bottom: 3px solid #b78628; /* Золотой цвет */
+        }
+        .score { font-size: 32px; font-weight: bold; }
+        .score-radiant { color: #8fce00; }
+        .score-dire { color: #d93636; }
+        .timer { font-size: 24px; font-weight: bold; }
+        .economy { font-size: 18px; color: #ccc; margin-top: 5px; }
+
+        /* Панель героев */
+        .heroes-container { position: absolute; top: 80px; left: 20px; display: flex; flex-direction: column; gap: 5px; }
+        .heroes-container.dire { left: auto; right: 20px; }
+
+        .hero-card {
+            display: flex; align-items: center; background: rgba(0,0,0,0.6);
+            width: 180px; padding: 5px; border-radius: 5px;
+            border-left: 3px solid #8fce00;
+        }
+        .hero-card.dire { border-left: none; border-right: 3px solid #d93636; flex-direction: row-reverse; text-align: right; }
+
+        .hero-avatar { width: 40px; height: 40px; background: #333; border-radius: 3px; margin: 0 10px; }
+        .hero-info { flex-grow: 1; }
+        .hero-name { font-size: 12px; font-weight: bold; text-transform: uppercase; }
+        .hero-lvl { font-size: 10px; color: #f1c40f; }
+
+        /* Полоски HP/MP */
+        .bar-container { height: 6px; background: #222; margin-top: 2px; border-radius: 3px; overflow: hidden; }
+        .hp-bar { height: 100%; background: #2ecc71; width: 0%; transition: width 0.2s; }
+        .mp-bar { height: 4px; background: #3498db; width: 0%; transition: width 0.2s; margin-top: 2px; }
+
+        /* Мертвый герой */
+        .hero-card.dead { opacity: 0.5; filter: grayscale(100%); }
+    </style>
+</head>
+<body>
+
+<!-- Центральный таймер и счет -->
+<div class="top-bar">
+    <div class="score score-radiant" id="score-radiant">0</div>
+    <div class="timer" id="timer">00:00</div>
+    <div class="score score-dire" id="score-dire">0</div>
+</div>
+
+<div class="top-bar" style="top: 60px; background: transparent; border: none; padding: 0; gap: 100px;">
+    <div class="economy" id="eco-radiant">0k</div>
+    <div class="economy" id="eco-diff">0</div>
+    <div class="economy" id="eco-dire">0k</div>
+</div>
+
+<!-- Контейнеры для героев -->
+<div class="heroes-container" id="radiant-heroes"></div>
+<div class="heroes-container dire" id="dire-heroes"></div>
+
+<script>
+    // Подключение к нашему WebSocket
+    const socket = new SockJS('/ws');
+    const stompClient = Stomp.over(socket);
+    stompClient.debug = null; // Отключаем логи в консоль (чтобы не спамило в OBS)
+
+    stompClient.connect({}, function (frame) {
+        console.log('Connected: ' + frame);
+        stompClient.subscribe('/topic/overlay', function (message) {
+            const state = JSON.parse(message.body);
+            updateUI(state);
+        });
+    });
+
+    function updateUI(state) {
+        // Обновляем таймер и счет
+        document.getElementById('timer').innerText = formatTime(state.gameTime);
+        document.getElementById('score-radiant').innerText = state.radiantScore;
+        document.getElementById('score-dire').innerText = state.direScore;
+
+        // Обновляем экономику
+        const rEco = Math.round(state.radiantEconomy / 1000);
+        const dEco = Math.round(state.direEconomy / 1000);
+        const diff = rEco - dEco;
+
+        document.getElementById('eco-radiant').innerText = rEco + 'k';
+        document.getElementById('eco-dire').innerText = dEco + 'k';
+
+        const diffEl = document.getElementById('eco-diff');
+        if (diff > 0) {
+            diffEl.innerText = '+' + diff + 'k';
+            diffEl.style.color = '#8fce00';
+        } else if (diff < 0) {
+            diffEl.innerText = diff + 'k';
+            diffEl.style.color = '#d93636';
+        } else {
+            diffEl.innerText = 'Even';
+            diffEl.style.color = 'white';
+        }
+
+        // Рисуем героев
+        renderHeroes('radiant-heroes', state.radiantHeroes, false);
+        renderHeroes('dire-heroes', state.direHeroes, true);
+    }
+
+    function renderHeroes(containerId, heroes, isDire) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+
+        // Если героев нет (например, пик), ничего не рисуем
+        if (!heroes || heroes.length === 0) return;
+
+        heroes.forEach(hero => {
+            const card = document.createElement('div');
+            card.className = `hero-card ${isDire ? 'dire' : ''} ${!hero.alive ? 'dead' : ''}`;
+
+            card.innerHTML = `
+                <div class="hero-avatar"></div> <!-- Сюда можно добавить <img src="..."> -->
+                <div class="hero-info" style="${isDire ? 'text-align: right;' : ''}">
+                    <div class="hero-name">${hero.name} <span class="hero-lvl">${hero.level}</span></div>
+                    <div class="bar-container"><div class="hp-bar" style="width: ${hero.hpPercent}%"></div></div>
+                    <div class="bar-container"><div class="mp-bar" style="width: ${hero.manaPercent}%"></div></div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    function formatTime(seconds) {
+        if (!seconds || seconds < 0) return "00:00";
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+</script>
+</body>
+</html>

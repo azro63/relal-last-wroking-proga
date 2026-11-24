@@ -1,30 +1,18 @@
+version: '3.8'
 services:
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  backend:
-    build:
-      context: ./backend
-    depends_on:
-      redis:
-        condition: service_healthy
-    environment:
-      # Внутри docker-сети Redis доступен по имени сервиса, а не localhost
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: "6379"
-    ports:
-      - "8081:8081"
     restart: unless-stopped
 
-volumes:
-  redisdata:
+  overlay-app:
+    build: .
+    ports:
+      - "8080:8080"   # Порт для OBS (браузер)
+      - "44444:44444" # Порт для приема GSI от Dota 2
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+    depends_on:
+      - redis
+    restart: unless-stopped

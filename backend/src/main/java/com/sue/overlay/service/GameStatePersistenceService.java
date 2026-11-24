@@ -1,16 +1,21 @@
 package com.sue.overlay.service;
 
-import com.sue.overlay.model.GameEvent;
+import com.github.mrbean355.dota2.gamestate.SpectatingGameState;
+import com.github.mrbean355.dota2.player.SpectatedPlayer;
+import com.github.mrbean355.dota2.hero.SpectatedHero;
 import com.sue.overlay.model.GameSnapshot;
+import com.sue.overlay.model.HeroState;
+import com.sue.overlay.model.OverlayState;
 import com.sue.overlay.repository.GameEventRepository;
 import com.sue.overlay.repository.GameSnapshotRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -21,83 +26,114 @@ public class GameStatePersistenceService {
 
     private final GameSnapshotRepository snapshotRepository;
     private final GameEventRepository eventRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    public GameStatePersistenceService(GameSnapshotRepository snapshotRepository, GameEventRepository eventRepository) {
+    public GameStatePersistenceService(GameSnapshotRepository snapshotRepository,
+                                       GameEventRepository eventRepository,
+                                       SimpMessagingTemplate messagingTemplate) {
         this.snapshotRepository = snapshotRepository;
         this.eventRepository = eventRepository;
+        this.messagingTemplate = messagingTemplate;
     }
 
-    /** body — JSON от Dota 2 GSI: { "map": { "clock_time": .., "game_time": .., "daytime": .., "win_team": .. }, "events": [..] } */
-    public void saveSnapshot(Map<String, Object> body) {
-        if (!(body.get("map") instanceof Map<?, ?> map)) return;
-        if (!(map.get("clock_time") instanceof Number clock)) return;
+    public void processGameState(SpectatingGameState state) {
+        if (state == null || state.getMap() == null) return;
 
-        Integer gameTime = map.get("game_time") instanceof Number gt ? gt.intValue() : null;
-        Boolean daytime = map.get("daytime") instanceof Boolean day ? day : null;
-        String winTeam = map.get("win_team") instanceof String win && !win.isBlank() && !"none".equals(win) ? win : null;
+        saveSnapshot(state);
+        OverlayState overlayState = buildOverlayState(state);
+        messagingTemplate.convertAndSend("/topic/overlay", overlayState);
+    }
 
-        GameSnapshot snapshot = new GameSnapshot(null, clock.intValue(), gameTime, daytime, winTeam,
-                LocalDateTime.now(ZoneOffset.UTC));
+    private void saveSnapshot(SpectatingGameState state) {
+        var map = state.getMap();
+        if (map == null) return;
+
+        GameSnapshot snapshot = new GameSnapshot(
+                null,
+                map.getClockTime(),
+                map.getGameTime(),
+                map.isDaytime(),
+                // Исправлено: метод называется getWinningTeam(), а не getWinTeam()
+                map.getWinningTeam() != null ? map.getWinningTeam().name() : null,
+                LocalDateTime.now(ZoneOffset.UTC)
+        );
         snapshotRepository.save(snapshot);
     }
 
-    public void saveEvents(Map<String, Object> body) {
-        if (!(body.get("events") instanceof List<?> events) || events.isEmpty()) return;
+    private OverlayState buildOverlayState(SpectatingGameState state) {
+        List<HeroState> radiantHeroes = new ArrayList<>();
+        List<HeroState> direHeroes = new ArrayList<>();
+        double radiantEco = 0;
+        double direEco = 0;
 
-        for (Object o : events) {
-            if (!(o instanceof Map<?, ?> ev)) continue;
-            if (!(ev.get("event_type") instanceof String type)) continue;
+        // getPlayers() возвращает Map<String, List<SpectatedPlayer>> (ключи "Radiant"/"Dire")
+        Map<String, List<SpectatedPlayer>> playersMap = state.getPlayers();
+        // getHeroes() возвращает Map<String, SpectatedHero> (ключ — ID игрока)
+        Map<String, SpectatedHero> heroesMap = state.getHeroes();
 
-            int gameTime = ev.get("game_time") instanceof Number n ? n.intValue() : 0;
-            GameEvent entity = eventRepository.save(
-                    new GameEvent(null, type, gameTime, toJson(ev), LocalDateTime.now(ZoneOffset.UTC)));
+        if (playersMap != null) {
+            // Проходим по всем командам (Radiant, Dire и, возможно, другие)
+            for (Map.Entry<String, List<SpectatedPlayer>> entry : playersMap.entrySet()) {
+                String teamName = entry.getKey();
+                List<SpectatedPlayer> teamPlayers = entry.getValue();
+                if (teamPlayers == null) continue;
 
-            log.info("Сохранено событие: {} на {} сек.", entity.eventType(), entity.gameTime());
-        }
-    }
+                for (SpectatedPlayer p : teamPlayers) {
+                    double netWorth = p.getNetWorth();
+                    // Получаем героя по ID игрока из отдельной Map
+                    SpectatedHero hero = heroesMap != null ? heroesMap.get(p.getId()) : null;
+                    HeroState heroState = mapHero(p, hero);
 
-    /** Минимальный JSON-сериализатор (Map / Collection / String / Number / Boolean / null). */
-    static String toJson(Object v) {
-        if (v == null) return "null";
-        if (v instanceof Number || v instanceof Boolean) return v.toString();
-        if (v instanceof Map<?, ?> m) {
-            StringBuilder sb = new StringBuilder("{");
-            boolean first = true;
-            for (Map.Entry<?, ?> e : m.entrySet()) {
-                if (!first) sb.append(',');
-                first = false;
-                sb.append(quote(String.valueOf(e.getKey()))).append(':').append(toJson(e.getValue()));
-            }
-            return sb.append('}').toString();
-        }
-        if (v instanceof Collection<?> c) {
-            StringBuilder sb = new StringBuilder("[");
-            boolean first = true;
-            for (Object x : c) {
-                if (!first) sb.append(',');
-                first = false;
-                sb.append(toJson(x));
-            }
-            return sb.append(']').toString();
-        }
-        return quote(v.toString());
-    }
-
-    private static String quote(String s) {
-        StringBuilder sb = new StringBuilder("\"");
-        for (char ch : s.toCharArray()) {
-            switch (ch) {
-                case '"' -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default -> {
-                    if (ch < 0x20) sb.append(String.format("\\u%04x", (int) ch));
-                    else sb.append(ch);
+                    if ("Radiant".equals(teamName)) {
+                        radiantEco += netWorth;
+                        radiantHeroes.add(heroState);
+                    } else if ("Dire".equals(teamName)) {
+                        direEco += netWorth;
+                        direHeroes.add(heroState);
+                    }
                 }
             }
         }
-        return sb.append('"').toString();
+
+        var map = state.getMap();
+        // Исправлено: getRadiantScore() и getDireScore() возвращают int (не Integer), проверка на null не нужна
+        int radiantScore = map.getRadiantScore();
+        int direScore = map.getDireScore();
+
+        return new OverlayState(
+                map.getClockTime(),
+                map.isDaytime(),
+                radiantScore,
+                direScore,
+                radiantEco,
+                direEco,
+                radiantHeroes,
+                direHeroes
+        );
+    }
+
+    private HeroState mapHero(SpectatedPlayer player, SpectatedHero hero) {
+        int hpPercent = 0;
+        int mpPercent = 0;
+        int level = 0;
+        boolean alive = false;
+        int respawnTimer = 0;
+
+        if (hero != null) {
+            hpPercent = hero.getHealthPercent();
+            mpPercent = hero.getManaPercent();
+            level = hero.getLevel();
+            alive = hero.isAlive();
+            respawnTimer = hero.getRespawnTimer();
+        }
+
+        return new HeroState(
+                player.getName(),
+                level,
+                hpPercent,
+                mpPercent,
+                alive,
+                respawnTimer
+        );
     }
 }
