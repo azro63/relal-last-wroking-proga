@@ -26,13 +26,11 @@ public class TimeChecker {
         GameStateServer.create(DOTA_GSI_PORT)
                 .setSpectatingListener(gameState -> {
                     if (gameState.getMap() != null) {
-                        int clockTime = gameState.getMap().getClockTime();
-                        log.debug("Игровое время: {} сек.", clockTime);
                         persistenceService.saveSnapshot(gameState);
-                    } else {
-                        log.debug("Данные карты недоступны (игра не идёт?)");
                     }
+                    // Сохраняем события, если они пришли (они могут приходить даже без map)
+                    persistenceService.saveEvents(gameState);
                 })
-                .startAsync(); // сервер работает в фоне, не блокируя Spring
+                .startAsync();
     }
 }
