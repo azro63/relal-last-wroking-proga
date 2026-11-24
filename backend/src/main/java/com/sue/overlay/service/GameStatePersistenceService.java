@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,8 +41,13 @@ public class GameStatePersistenceService {
         if (state == null || state.getMap() == null) return;
 
         saveSnapshot(state);
+        // 1. Отправляем обработанные данные для стандартного оверлея
         OverlayState overlayState = buildOverlayState(state);
         messagingTemplate.convertAndSend("/topic/overlay", overlayState);
+
+        // 2. Отправляем ПОЛНЫЕ сырые данные для кастомных оверлеев
+        // Spring сам превратит этот объект в JSON со всеми полями (items, abilities, draft и т.д.)
+        messagingTemplate.convertAndSend("/topic/raw", state);
     }
 
     private void saveSnapshot(SpectatingGameState state) {
@@ -53,7 +59,6 @@ public class GameStatePersistenceService {
                 map.getClockTime(),
                 map.getGameTime(),
                 map.isDaytime(),
-                // Исправлено: метод называется getWinningTeam(), а не getWinTeam()
                 map.getWinningTeam() != null ? map.getWinningTeam().name() : null,
                 LocalDateTime.now(ZoneOffset.UTC)
         );
@@ -66,37 +71,58 @@ public class GameStatePersistenceService {
         double radiantEco = 0;
         double direEco = 0;
 
-        // getPlayers() возвращает Map<String, List<SpectatedPlayer>> (ключи "Radiant"/"Dire")
         Map<String, List<SpectatedPlayer>> playersMap = state.getPlayers();
-        // getHeroes() возвращает Map<String, SpectatedHero> (ключ — ID игрока)
         Map<String, SpectatedHero> heroesMap = state.getHeroes();
 
+        // Собираем всех игроков в мапу по слоту для быстрого поиска
+        Map<Integer, SpectatedPlayer> playerBySlot = new HashMap<>();
         if (playersMap != null) {
-            // Проходим по всем командам (Radiant, Dire и, возможно, другие)
-            for (Map.Entry<String, List<SpectatedPlayer>> entry : playersMap.entrySet()) {
-                String teamName = entry.getKey();
-                List<SpectatedPlayer> teamPlayers = entry.getValue();
-                if (teamPlayers == null) continue;
-
+            for (List<SpectatedPlayer> teamPlayers : playersMap.values()) {
                 for (SpectatedPlayer p : teamPlayers) {
-                    double netWorth = p.getNetWorth();
-                    // Получаем героя по ID игрока из отдельной Map
-                    SpectatedHero hero = heroesMap != null ? heroesMap.get(p.getId()) : null;
-                    HeroState heroState = mapHero(p, hero);
+                    playerBySlot.put(p.getPlayerSlot(), p);
+                }
+            }
+        }
 
-                    if ("Radiant".equals(teamName)) {
-                        radiantEco += netWorth;
-                        radiantHeroes.add(heroState);
-                    } else if ("Dire".equals(teamName)) {
-                        direEco += netWorth;
-                        direHeroes.add(heroState);
-                    }
+        // Итерируемся по героям (ключи: player0 ... player9)
+        if (heroesMap != null) {
+            for (Map.Entry<String, SpectatedHero> entry : heroesMap.entrySet()) {
+                String key = entry.getKey();
+                SpectatedHero hero = entry.getValue();
+                if (hero == null) continue;
+
+                // Извлекаем индекс 0..9 из ключа "playerN"
+                int index = -1;
+                if (key.startsWith("player")) {
+                    try {
+                        index = Integer.parseInt(key.substring(6));
+                    } catch (NumberFormatException ignored) {}
+                }
+                if (index < 0) continue;
+
+                boolean isRadiant = index < 5;
+                // ИСПРАВЛЕНИЕ: правильный слот для Dire — 128 + (index - 5)
+                int playerSlot = isRadiant ? index : (index - 5 + 128);
+
+                SpectatedPlayer player = playerBySlot.get(playerSlot);
+                String playerName = (player != null && player.getName() != null)
+                        ? player.getName()
+                        : "Player " + index;
+                double netWorth = player != null ? player.getNetWorth() : 0;
+
+                HeroState heroState = mapHero(playerName, hero);
+
+                if (isRadiant) {
+                    radiantHeroes.add(heroState);
+                    radiantEco += netWorth;
+                } else {
+                    direHeroes.add(heroState);
+                    direEco += netWorth;
                 }
             }
         }
 
         var map = state.getMap();
-        // Исправлено: getRadiantScore() и getDireScore() возвращают int (не Integer), проверка на null не нужна
         int radiantScore = map.getRadiantScore();
         int direScore = map.getDireScore();
 
@@ -112,12 +138,15 @@ public class GameStatePersistenceService {
         );
     }
 
-    private HeroState mapHero(SpectatedPlayer player, SpectatedHero hero) {
+    private HeroState mapHero(String playerName, SpectatedHero hero) {
         int hpPercent = 0;
         int mpPercent = 0;
         int level = 0;
         boolean alive = false;
         int respawnTimer = 0;
+
+        // ИСПРАВЛЕНИЕ: получаем внутреннее имя героя для картинки
+        String heroName = hero.getName(); // например, "npc_dota_hero_axe"
 
         if (hero != null) {
             hpPercent = hero.getHealthPercent();
@@ -128,7 +157,8 @@ public class GameStatePersistenceService {
         }
 
         return new HeroState(
-                player.getName(),
+                playerName,
+                heroName, // Передаем имя героя в модель
                 level,
                 hpPercent,
                 mpPercent,
