@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
 
   overlay-app:
-    build: .
+    build: ./backend
     ports:
       - "8080:8080"   # Порт для OBS (браузер)
       - "44444:44444" # Порт для приема GSI от Dota 2
